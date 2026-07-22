@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>n8proof // Mission Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  /* ===================== DESIGN TOKENS ===================== */
+  :root{
+    --bg:        #06070d;   /* near-black, cool blue undertone */
+    --bg-2:      #0a0c15;
+    --ink:       #ece6da;   /* warm off-white */
+    --ink-dim:   #9a968c;
+    --ink-faint: #5e5b54;
+    --violet:    #8b5cf6;
+    --violet-2:  #a855f7;
+    --pink:      #ff2d78;
+    --gold:      #ffb627;
+    --glass:     rgba(255,255,255,0.035);
+    --glass-2:   rgba(255,255,255,0.06);
+    --line:      rgba(255,255,255,0.10);
+    --green:     #10b981;
+    --red:       #ef4444;
+    --ease:      cubic-bezier(0.16, 1, 0.3, 1);
+    --dur:       0.8s;
+    --maxw:      1180px;
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html{ scroll-behavior:smooth; }
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    font-weight:300;
+    line-height:1.6;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+    cursor:none;
+  }
+  @media (hover:none){ body{ cursor:auto; } }
+
+  ::selection{ background:var(--violet); color:#0a0a0f; }
+
+  a{ color:inherit; text-decoration:none; }
+  h1,h2,h3,h4{ font-family:'Instrument Serif',serif; font-weight:400; line-height:1.02; letter-spacing:-0.01em; }
+  .mono{ font-family:'JetBrains Mono',monospace; text-transform:uppercase; letter-spacing:0.22em; font-size:0.7rem; color:var(--ink-dim); }
+  .accent-v{ color:var(--violet-2); }
+  .accent-p{ color:var(--pink); }
+  .accent-g{ color:var(--gold); }
+
+  .wrap{ max-width:var(--maxw); margin:0 auto; padding:0 28px; }
+
+  /* ===================== ATMOSPHERE ===================== */
+  .atmo{ position:fixed; inset:0; z-index:0; pointer-events:none; }
+  .noise{
+    position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.03;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .grid{
+    position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0.05;
+    background-image:radial-gradient(rgba(255,255,255,0.5) 1px, transparent 1px);
+    background-size:34px 34px;
+  }
+  .orb{ position:fixed; border-radius:50%; filter:blur(90px); z-index:0; pointer-events:none; opacity:0.55; will-change:transform; }
+  .orb.a{ width:46vw; height:46vw; left:-12vw; top:-8vw; background:radial-gradient(circle, rgba(139,92,246,0.55), transparent 65%); }
+  .orb.b{ width:42vw; height:42vw; right:-10vw; bottom:-6vw; background:radial-gradient(circle, rgba(255,45,120,0.45), transparent 65%); }
+
+  /* ===================== CURSOR ===================== */
+  .cur-dot,.cur-ring{ position:fixed; top:0; left:0; z-index:9999; pointer-events:none; border-radius:50%; mix-blend-mode:difference; }
+  .cur-dot{ width:7px; height:7px; background:#fff; transform:translate(-50%,-50%); }
+  .cur-ring{ width:38px; height:38px; border:1.5px solid #fff; transform:translate(-50%,-50%); transition:width var(--dur) var(--ease), height var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+  .cur-ring.hot{ width:62px; height:62px; border-color:var(--gold); }
+  @media (hover:none){ .cur-dot,.cur-ring{ display:none; } }
+
+  /* ===================== LOADER ===================== */
+  #loader{ position:fixed; inset:0; z-index:10000; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:26px; transition:opacity 0.6s ease, visibility 0.6s; }
+  #loader.done{ opacity:0; visibility:hidden; }
+  .load-name{ font-family:'Instrument Serif',serif; font-size:clamp(2.6rem,9vw,6rem); letter-spacing:0.04em; animation:pulse 2.2s var(--ease) infinite; }
+  .load-name span { background:linear-gradient(120deg,var(--violet-2),var(--pink)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  @keyframes pulse{ 0%,100%{ opacity:0.55; text-shadow:0 0 0 transparent; } 50%{ opacity:1; text-shadow:0 0 38px rgba(139,92,246,0.5); } }
+  .load-bar{ width:min(320px,70vw); height:2px; background:rgba(255,255,255,0.08); overflow:hidden; }
+  .load-fill{ height:100%; width:0%; background:linear-gradient(90deg,var(--violet),var(--pink),var(--gold)); transition:width 0.2s linear; }
+  .load-sub{ font-family:'JetBrains Mono',monospace; font-size:0.62rem; letter-spacing:0.3em; color:var(--ink-faint); text-transform:uppercase; }
+
+  /* ===================== NAV ===================== */
+  nav{ position:fixed; top:0; left:0; right:0; z-index:900; padding:20px 0; transition:background var(--dur) var(--ease), border-color var(--dur) var(--ease), backdrop-filter var(--dur) var(--ease), padding var(--dur) var(--ease); border-bottom:1px solid transparent; }
+  nav.solid{ background:rgba(8,9,15,0.72); backdrop-filter:blur(16px); border-bottom:1px solid var(--line); padding:14px 0; }
+  nav .row{ display:flex; align-items:center; justify-content:space-between; }
+  .brand{ font-family:'Instrument Serif',serif; font-size:1.5rem; letter-spacing:0.06em; display:flex; align-items:center; gap:10px; }
+  .brand .dot{ width:9px; height:9px; border-radius:50%; background:var(--gold); box-shadow:0 0 12px var(--gold); }
+  .brand .b-n8{ color:var(--violet-2); }
+  .nav-links{ display:flex; gap:30px; align-items:center; }
+  .nav-links a{ font-family:'JetBrains Mono',monospace; font-size:0.66rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--ink-dim); transition:color var(--dur) var(--ease); }
+  .nav-links a:hover{ color:var(--ink); }
+  .burger{ display:none; width:30px; height:18px; position:relative; cursor:pointer; }
+  .burger span{ position:absolute; left:0; height:2px; width:100%; background:var(--ink); transition:transform var(--dur) var(--ease), opacity var(--dur) var(--ease); }
+  .burger span:nth-child(1){ top:0; } .burger span:nth-child(2){ top:8px; } .burger span:nth-child(3){ top:16px; }
+  .burger.x span:nth-child(1){ transform:translateY(8px) rotate(45deg); }
+  .burger.x span:nth-child(2){ opacity:0; }
+  .burger.x span:nth-child(3){ transform:translateY(-8px) rotate(-45deg); }
+  .mobile-menu{ position:fixed; inset:0; z-index:850; background:rgba(6,7,13,0.97); backdrop-filter:blur(20px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:34px; opacity:0; visibility:hidden; transition:opacity var(--dur) var(--ease), visibility var(--dur) var(--ease); }
+  .mobile-menu.open{ opacity:1; visibility:visible; }
+  .mobile-menu a{ font-family:'Instrument Serif',serif; font-size:2.2rem; }
+
+  /* ===================== HERO ===================== */
+  header.hero{ position:relative; z-index:2; min-height:100vh; display:flex; align-items:center; padding:120px 0 60px; }
+  .hero-tag{ display:inline-flex; align-items:center; gap:10px; padding:7px 14px; border:1px solid var(--line); border-radius:100px; background:var(--glass); margin-bottom:30px; }
+  .hero h1{ font-size:clamp(4rem,17vw,15rem); line-height:0.86; letter-spacing:-0.02em; }
+  .hero h1 .glow{ background:linear-gradient(120deg,var(--violet-2),var(--pink)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .hero-sub{ max-width:620px; font-size:clamp(1.05rem,2vw,1.4rem); color:var(--ink); margin:30px 0 14px; font-weight:300; }
+  .hero-sub b{ font-weight:600; color:var(--gold); }
+  .hero-meta{ font-family:'JetBrains Mono',monospace; font-size:0.72rem; letter-spacing:0.12em; color:var(--ink-dim); margin-bottom:38px; }
+  .cta-row{ display:flex; gap:16px; flex-wrap:wrap; }
+  .btn{ position:relative; overflow:hidden; padding:15px 30px; border-radius:100px; font-family:'JetBrains Mono',monospace; font-size:0.72rem; letter-spacing:0.16em; text-transform:uppercase; border:1px solid var(--line); background:var(--glass); color:var(--ink); transition:transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease); cursor:none; }
+  .btn.primary{ background:linear-gradient(120deg,var(--violet),var(--pink)); border-color:transparent; color:#0a0a0f; font-weight:500; }
+  .btn:hover{ transform:translateY(-4px); box-shadow:0 14px 40px rgba(139,92,246,0.35); }
+  .btn::after{ content:""; position:absolute; top:0; left:-120%; width:60%; height:100%; background:linear-gradient(120deg,transparent,rgba(255,255,255,0.45),transparent); transform:skewX(-20deg); transition:left 0.7s var(--ease); }
+  .btn:hover::after{ left:140%; }
+  .scroll-hint{ position:absolute; bottom:30px; left:50%; transform:translateX(-50%); font-family:'JetBrains Mono',monospace; font-size:0.6rem; letter-spacing:0.3em; color:var(--ink-faint); text-transform:uppercase; animation:bob 2s var(--ease) infinite; }
+  @keyframes bob{ 0%,100%{ transform:translate(-50%,0);} 50%{ transform:translate(-50%,8px);} }
+
+  /* ===================== SECTIONS ===================== */
+  section{ position:relative; z-index:2; padding:120px 0; }
+  .sec-head{ margin-bottom:60px; }
+  .sec-head .mono{ display:block; margin-bottom:14px; }
+  .sec-head h2{ font-size:clamp(2.4rem,6vw,4.6rem); }
+  .sec-head p{ max-width:640px; color:var(--ink-dim); margin-top:16px; }
+
+  /* reveal */
+  .reveal{ opacity:0; transform:translateY(38px); transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease); }
+  .reveal.in{ opacity:1; transform:none; }
+  
+  .card{ padding:34px 30px; border:1px solid var(--line); border-radius:22px; background:var(--glass); backdrop-filter:blur(12px); transition:transform var(--dur) var(--ease), border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+  .card:hover{ transform:translateY(-8px); border-color:rgba(139,92,246,0.45); }
+
+  /* ===================== STATS ===================== */
+  .stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:18px; }
+  .stat{ padding:34px 28px; border:1px solid var(--line); border-radius:20px; background:var(--glass); backdrop-filter:blur(10px); transition:transform var(--dur) var(--ease), border-color var(--dur) var(--ease), background var(--dur) var(--ease); }
+  .stat:hover{ transform:translateY(-8px); border-color:rgba(139,92,246,0.5); background:var(--glass-2); }
+  .stat .num{ font-family:'Instrument Serif',serif; font-size:clamp(2.6rem,5vw,3.6rem); line-height:1; }
+  .stat .num .sfx{ font-size:0.5em; vertical-align:middle; color:var(--ink-faint); margin-left:4px;}
+  .stat .lbl{ font-family:'JetBrains Mono',monospace; font-size:0.6rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--ink-dim); margin-top:12px; }
+
+  /* ===================== GATE ===================== */
+  .gate-bars{ display:flex; flex-direction:column; gap:20px; margin-bottom:40px; }
+  .gate-bar-wrap{ padding:26px 30px; border:1px solid var(--line); border-radius:18px; background:var(--glass); backdrop-filter:blur(10px); }
+  .gate-bar-wrap .ti{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; font-family:'JetBrains Mono',monospace; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.1em; }
+  .g-bar{ height:8px; background:rgba(255,255,255,0.07); border-radius:100px; overflow:hidden; }
+  .g-bar i{ display:block; height:100%; width:0%; border-radius:100px; transition:width 1.4s var(--ease); }
+  .g-bar.v i{ background:linear-gradient(90deg,var(--violet),var(--violet-2)); }
+  .g-bar.p i{ background:linear-gradient(90deg,var(--pink),#ff6b9d); }
+  
+  .gate-status{ display:flex; flex-direction:column; gap:10px; }
+  .pivot-chain{ display:flex; align-items:center; gap:16px; margin-top:20px; font-family:'JetBrains Mono',monospace; font-size:0.75rem; color:var(--ink-dim); }
+  .pivot-chain .node{ padding:6px 12px; border:1px solid var(--line); border-radius:100px; background:rgba(255,255,255,0.02); }
+  .pivot-chain .node.active{ border-color:var(--violet-2); color:var(--violet-2); background:rgba(139,92,246,0.1); }
+  @media(max-width:600px){ .pivot-chain{ flex-direction:column; align-items:flex-start; } .pivot-chain span{ transform:rotate(90deg); margin:4px 0; } }
+
+  /* ===================== TASKS ===================== */
+  .task-summary{ display:flex; align-items:center; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:var(--ink-dim); margin-bottom:12px; padding:0 10px; }
+  .task-progress{ height:3px; background:rgba(255,255,255,0.07); border-radius:100px; overflow:hidden; margin-bottom:40px; display:flex; }
+  .task-progress .done-p{ background:var(--green); transition:width 0.4s; }
+  .task-progress .in-p{ background:var(--gold); transition:width 0.4s; }
+
+  .task-group{ margin-bottom:30px; }
+  .task-group-title{ font-family:'JetBrains Mono',monospace; font-size:0.75rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--ink); margin-bottom:14px; display:flex; align-items:center; gap:10px; cursor:pointer; }
+  .task-group-title::after{ content:""; flex:1; height:1px; background:var(--line); }
+  
+  .task-list{ display:flex; flex-direction:column; gap:8px; overflow:hidden; transition:max-height var(--dur) var(--ease); }
+  .task-item{ padding:16px 20px; border:1px solid var(--line); border-radius:12px; background:var(--glass); backdrop-filter:blur(8px); display:flex; align-items:center; gap:16px; transition:all 0.3s var(--ease); cursor:pointer; user-select:none; }
+  .task-item:hover{ border-color:rgba(139,92,246,0.3); background:var(--glass-2); }
+  
+  .t-icon{ width:20px; height:20px; border-radius:50%; border:1px solid var(--ink-faint); display:flex; align-items:center; justify-content:center; font-size:10px; transition:all 0.3s; flex-shrink:0; }
+  .t-text{ font-size:0.95rem; transition:color 0.3s; flex:1; }
+  
+  /* Status states */
+  .task-item[data-status="todo"] .t-text{ color:var(--ink-dim); }
+  
+  .task-item[data-status="inprogress"]{ border-color:rgba(255,182,39,0.3); }
+  .task-item[data-status="inprogress"] .t-icon{ border-color:var(--gold); background:linear-gradient(90deg, var(--gold) 50%, transparent 50%); }
+  .task-item[data-status="inprogress"] .t-text{ color:var(--ink); }
+  
+  .task-item[data-status="done"]{ border-color:rgba(16,185,129,0.2); background:rgba(16,185,129,0.03); }
+  .task-item[data-status="done"] .t-icon{ border-color:var(--green); background:var(--green); color:#000; }
+  .task-item[data-status="done"] .t-icon::after{ content:"✓"; }
+  .task-item[data-status="done"] .t-text{ color:var(--ink-faint); text-decoration:line-through; }
+
+  /* ===================== OVERALL DONUT ===================== */
+  .donut-wrap{ display:flex; align-items:center; justify-content:center; margin:40px 0; }
+  .donut-container{ position:relative; width:240px; height:240px; }
+  svg.donut{ transform:rotate(-90deg); width:100%; height:100%; }
+  .donut-bg{ fill:none; stroke:var(--glass-2); stroke-width:12; }
+  .donut-segment{ fill:none; stroke-width:12; stroke-linecap:round; transition:stroke-dasharray 1.5s var(--ease), stroke-dashoffset 1.5s var(--ease); }
+  .donut-done{ stroke:var(--green); }
+  .donut-in{ stroke:var(--gold); }
+  .donut-center{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .donut-center h3{ font-size:3.5rem; line-height:1; }
+  .donut-center span{ font-family:'JetBrains Mono',monospace; font-size:0.6rem; letter-spacing:0.1em; color:var(--ink-dim); text-transform:uppercase; margin-top:8px;}
+
+  /* ===================== ROADMAP ===================== */
+  .timeline{ position:relative; padding-left:34px; }
+  .timeline:before{ content:""; position:absolute; left:9px; top:6px; bottom:6px; width:2px; background:linear-gradient(var(--violet),var(--pink),var(--gold)); }
+  .tl{ position:relative; padding:0 0 40px 0; }
+  .tl:before{ content:""; position:absolute; left:-31px; top:6px; width:14px; height:14px; border-radius:50%; background:var(--bg); border:2px solid var(--ink-faint); box-shadow:0 0 0 transparent; transition:all 0.5s; }
+  .tl.active:before{ border-color:var(--gold); box-shadow:0 0 14px var(--gold); }
+  .tl .when{ font-family:'JetBrains Mono',monospace; font-size:0.66rem; letter-spacing:0.16em; text-transform:uppercase; color:var(--violet-2); }
+  .tl.active .when{ color:var(--gold); }
+  .tl h4{ font-size:1.5rem; margin:6px 0 6px; }
+  .tl p{ color:var(--ink-dim); font-size:0.9rem; max-width:560px; }
+
+  /* ===================== INTEL ===================== */
+  .intel-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; margin-bottom:40px; }
+  .intel-card{ padding:26px 24px; border:1px solid var(--line); border-radius:20px; background:var(--glass); backdrop-filter:blur(10px); transition:transform var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+  .intel-card:hover{ transform:translateY(-8px); border-color:rgba(139,92,246,0.3); }
+  .i-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
+  .i-head h4{ font-size:1.5rem; }
+  .threat{ display:inline-flex; align-items:center; justify-content:center; width:10px; height:10px; border-radius:50%; }
+  .threat.high{ background:var(--red); box-shadow:0 0 10px var(--red); }
+  .threat.med{ background:var(--gold); box-shadow:0 0 10px var(--gold); }
+  .threat.low{ background:var(--green); }
+  .intel-card p{ font-size:0.85rem; color:var(--ink-dim); margin-bottom:12px; min-height:42px; }
+  .i-gap{ font-size:0.8rem; border-top:1px solid var(--line); padding-top:12px; color:var(--ink); }
+  .i-gap b{ color:var(--violet-2); font-weight:500; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em;}
+
+  .moat-bar{ padding:20px; border-radius:12px; border:1px solid rgba(255,182,39,0.3); background:rgba(255,182,39,0.05); text-align:center; font-size:0.9rem; }
+  .moat-bar b{ color:var(--gold); }
+
+  /* ===================== LOG ===================== */
+  .log-list{ display:flex; flex-direction:column; gap:16px; }
+  .log-item{ display:flex; gap:20px; padding:16px 20px; border-left:2px solid var(--line); background:var(--glass); border-radius:0 12px 12px 0; transition:all 0.3s; }
+  .log-item:hover{ border-left-color:var(--violet-2); background:var(--glass-2); }
+  .log-date{ font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:var(--ink-faint); white-space:nowrap; }
+  .log-text{ font-size:0.9rem; color:var(--ink); }
+
+  /* ===================== QUESTIONS ===================== */
+  .q-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
+  .q-card{ padding:22px 24px; border:1px solid var(--line); border-radius:16px; background:var(--glass); transition:transform 0.3s; }
+  .q-card:hover{ transform:translateY(-4px); border-color:var(--gold); }
+  .q-card .tag{ display:inline-block; font-family:'JetBrains Mono',monospace; font-size:0.6rem; padding:3px 8px; border-radius:4px; background:rgba(255,255,255,0.05); margin-bottom:12px; text-transform:uppercase; }
+  .q-card .tag.open{ color:var(--gold); background:rgba(255,182,39,0.1); }
+  .q-card .tag.unverified{ color:var(--red); background:rgba(239,68,68,0.1); }
+  .q-card p{ font-size:1rem; }
+
+  /* ===================== RULES ===================== */
+  .rules-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; }
+  .rule-card{ padding:24px; border:1px solid var(--line); border-radius:16px; background:var(--glass); display:flex; gap:16px; align-items:flex-start; }
+  .rule-card .dot{ width:12px; height:12px; border-radius:50%; margin-top:6px; flex-shrink:0; }
+  .rule-card .dot.r{ background:var(--red); box-shadow:0 0 12px var(--red); }
+  .rule-card .dot.y{ background:var(--gold); box-shadow:0 0 12px var(--gold); }
+  .rule-card h4{ font-size:1.3rem; margin-bottom:4px; }
+  .rule-card p{ font-size:0.85rem; color:var(--ink-dim); }
+
+  /* ===================== FOOTER ===================== */
+  footer{ position:relative; z-index:2; padding:80px 0 50px; border-top:1px solid var(--line); text-align:center; }
+  footer .big{ font-family:'Instrument Serif',serif; font-size:clamp(2.4rem,7vw,5rem); line-height:1; }
+  footer .mono{ margin-top:20px; }
+  footer .small{ margin-top:30px; font-size:0.72rem; color:var(--ink-faint); }
+
+  /* ===================== FLOATING ACTIONS ===================== */
+  .fab-container{ position:fixed; bottom:30px; right:30px; z-index:900; display:flex; flex-direction:column; gap:12px; }
+  .fab{ padding:12px 20px; border-radius:100px; font-family:'JetBrains Mono',monospace; font-size:0.7rem; letter-spacing:0.1em; text-transform:uppercase; border:1px solid var(--line); background:var(--glass); backdrop-filter:blur(10px); color:var(--ink); cursor:pointer; transition:all 0.3s; display:flex; align-items:center; gap:8px; box-shadow:0 4px 20px rgba(0,0,0,0.5); }
+  .fab.primary{ background:linear-gradient(120deg,var(--violet),var(--violet-2)); border:none; color:#fff; box-shadow:0 8px 30px rgba(139,92,246,0.4); }
+  .fab:hover{ transform:translateY(-4px); }
+  
+  .toast{ position:fixed; bottom:90px; right:30px; z-index:1000; padding:12px 24px; background:var(--green); color:#000; font-family:'JetBrains Mono',monospace; font-size:0.75rem; border-radius:8px; opacity:0; transform:translateY(20px); pointer-events:none; transition:all 0.3s; }
+  .toast.show{ opacity:1; transform:translateY(0); }
+
+  @media(max-width:760px){
+    .nav-links{ display:none; }
+    .burger{ display:block; }
+    section{ padding:90px 0; }
+    .fab-container{ bottom:20px; right:20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ ATMOSPHERE ============ -->
+<div class="atmo">
+  <div class="grid"></div>
+  <div class="orb a" id="orbA"></div>
+  <div class="orb b" id="orbB"></div>
+</div>
+<div class="noise"></div>
+
+<!-- ============ CURSOR ============ -->
+<div class="cur-ring" id="curRing"></div>
+<div class="cur-dot" id="curDot"></div>
+
+<!-- ============ LOADER ============ -->
+<div id="loader">
+  <div class="load-name"><span>n8</span>proof</div>
+  <div class="load-bar"><div class="load-fill" id="loadFill"></div></div>
+  <div class="load-sub">Initializing Mission Control</div>
+</div>
+
+<!-- ============ NAV ============ -->
+<nav id="nav">
+  <div class="wrap row">
+    <div class="brand"><span class="b-n8">n8</span>proof<span class="dot"></span></div>
+    <div class="nav-links">
+      <a href="#hero" class="interactive">Overview</a>
+      <a href="#gate" class="interactive">Gate</a>
+      <a href="#tasks" class="interactive">Tasks</a>
+      <a href="#roadmap" class="interactive">Roadmap</a>
+      <a href="#intel" class="interactive">Intel</a>
+      <a href="#log" class="interactive">Log</a>
+      <button class="btn primary interactive" onclick="exportTracker()" style="padding:8px 16px; font-size:0.65rem;">Export TRACKER</button>
+    </div>
+    <div class="burger interactive" id="burger"><span></span><span></span><span></span></div>
+  </div>
+</nav>
+<div class="mobile-menu" id="mobileMenu">
+  <a href="#hero">Overview</a>
+  <a href="#gate">Gate</a>
+  <a href="#tasks">Tasks</a>
+  <a href="#roadmap">Roadmap</a>
+  <a href="#intel">Intel</a>
+  <a href="#log">Log</a>
+  <a href="#" onclick="exportTracker(); document.getElementById('burger').click();">Export TRACKER</a>
+</div>
+
+<!-- ============ HERO ============ -->
+<header class="hero" id="hero">
+  <div class="wrap">
+    <div class="hero-tag reveal"><span class="mono">◉ MISSION CONTROL · PHASE 0</span></div>
+    <h1 class="reveal"><span class="glow">n8</span>proof</h1>
+    <p class="hero-sub reveal">The reliability layer for n8n agencies. <b>Grade → Monitor → Prove.</b></p>
+    <div class="hero-meta reveal">PHASE 0 · PRE-VALIDATION · DAY 3 OF ∞ · GATE NOT OPEN</div>
+    <div class="cta-row reveal">
+      <a href="#gate" class="btn primary interactive">View the Gate</a>
+      <a href="#tasks" class="btn interactive">Task Board</a>
+    </div>
+  </div>
+  <div class="scroll-hint">Scroll to initialize</div>
+</header>
+
+<!-- ============ STATS ============ -->
+<section id="stats">
+  <div class="wrap">
+    <div class="stats">
+      <div class="stat reveal"><div class="num"><span class="pre">$</span><span data-count="500" data-cur="0">0</span></div><div class="lbl">MRR Target (Realistic)</div></div>
+      <div class="stat reveal"><div class="num"><span data-count="40" data-cur="0">0</span><span class="sfx">/ 40</span></div><div class="lbl">Warm ICP Replies</div></div>
+      <div class="stat reveal"><div class="num"><span data-count="5" data-cur="0">0</span><span class="sfx">/ 5</span></div><div class="lbl">Founding Deposits</div></div>
+      <div class="stat reveal"><div class="num"><span data-count="3">0</span></div><div class="lbl">Days Since Kickoff</div></div>
+      <div class="stat reveal"><div class="num"><span data-count="8">0</span></div><div class="lbl">Verified Competitors</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ GATE ============ -->
+<section id="gate">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="mono">The Only Rule That Decides</span>
+      <h2>The Gate</h2>
+      <p>40 warm ICP replies OR 5 refundable founding deposits within 7 days of first outreach. No extensions. No re-litigating.</p>
+    </div>
+    
+    <div class="gate-bars">
+      <div class="gate-bar-wrap reveal">
+        <div class="ti"><span>Warm Replies</span><span>0 / 40 (0%)</span></div>
+        <div class="g-bar v"><i style="width:0%"></i></div>
+      </div>
+      <div class="gate-bar-wrap reveal">
+        <div class="ti"><span>Founding Deposits</span><span>0 / 5 (0%)</span></div>
+        <div class="g-bar p"><i style="width:0%"></i></div>
+      </div>
+    </div>
+
+    <div class="card reveal gate-status">
+      <h3>⏳ NOT OPEN — Opens when first outreach is sent</h3>
+      <p style="color:var(--ink-dim); font-size:0.9rem;">PASS → Build monitor | FAIL → Pivot to FinePrint by Day 8-9</p>
+      
+      <div class="pivot-chain">
+        <div class="node active">n8proof</div>
+        <span>→</span>
+        <div class="node">FinePrint</div>
+        <span>→</span>
+        <div class="node">Developer API</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TASKS ============ -->
+<section id="tasks">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="mono">Execution Tracker</span>
+      <h2>Task Board</h2>
+      <p>Click any task to cycle: ☐ Todo → ◐ In Progress → ✓ Done</p>
+    </div>
+
+    <div class="reveal">
+      <div class="task-summary">
+        <span>TOTAL: <span id="ts-tot">0</span></span>
+        <span>DONE: <span id="ts-dn" style="color:var(--green)">0</span></span>
+        <span>IN PROGRESS: <span id="ts-ip" style="color:var(--gold)">0</span></span>
+        <span>TODO: <span id="ts-td" style="color:var(--ink-dim)">0</span></span>
+        <span id="ts-pct">0%</span>
+      </div>
+      <div class="task-progress">
+        <div class="done-p" id="tp-dn" style="width:0%"></div>
+        <div class="in-p" id="tp-ip" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div id="taskBoardContainer">
+      <!-- Tasks rendered via JS -->
+    </div>
+    
+    <div class="donut-wrap reveal">
+      <div class="donut-container">
+        <svg class="donut" viewBox="0 0 100 100">
+          <circle class="donut-bg" cx="50" cy="50" r="40"></circle>
+          <circle class="donut-segment donut-in" cx="50" cy="50" r="40" id="donutIn"></circle>
+          <circle class="donut-segment donut-done" cx="50" cy="50" r="40" id="donutDone"></circle>
+        </svg>
+        <div class="donut-center">
+          <h3 id="donutPct">0%</h3>
+          <span>Completed</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ROADMAP ============ -->
+<section id="roadmap">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="mono">Post-Gate Execution</span>
+      <h2>The 12-Week Roadmap</h2>
+    </div>
+    <div class="timeline">
+      <div class="tl active reveal"><div class="when">Now</div><h4>Pre-Gate</h4><p>Deploy, outreach, open the gate</p></div>
+      <div class="tl reveal"><div class="when">Day 1-7</div><h4>Gate Week</h4><p>40 warm replies OR 5 deposits</p></div>
+      <div class="tl reveal"><div class="when">Weeks 1-2</div><h4>Monitor MVP</h4><p>Execution watching + silent-failure detection + alerts + weekly report</p></div>
+      <div class="tl reveal"><div class="when">Weeks 2-4</div><h4>Founding Onboard</h4><p>5 agencies hands-on, tune detector, collect quotes</p></div>
+      <div class="tl reveal"><div class="when">Weeks 4-8</div><h4>Scale</h4><p>SEO, Show HN, Product Hunt → target $1k MRR</p></div>
+      <div class="tl reveal"><div class="when">Weeks 9-12</div><h4>Exit Prep</h4><p>Churn work, buyer docs, real comps, list on TrustMRR</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INTEL ============ -->
+<section id="intel">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="mono">Competitive Intelligence</span>
+      <h2>The Battlefield</h2>
+    </div>
+    <div class="intel-grid">
+      <div class="intel-card reveal">
+        <div class="i-head"><h4>Audit8n</h4><div class="threat high" title="HIGH THREAT"></div></div>
+        <p>Free browser static analyzer.</p>
+        <div class="i-gap"><b>GAP vs n8proof</b><br/>No runtime monitoring.</div>
+      </div>
+      <div class="intel-card reveal">
+        <div class="i-head"><h4>FlowPulse</h4><div class="threat high"></div></div>
+        <p>Paid monitoring n8n/Make/Zapier.</p>
+        <div class="i-gap"><b>GAP vs n8proof</b><br/>Broad tool focus, lacks agency white-labeling.</div>
+      </div>
+      <div class="intel-card reveal">
+        <div class="i-head"><h4>FlowLint</h4><div class="threat high"></div></div>
+        <p>n8n workflow linter (Chrome ext, CLI, GitHub App).</p>
+        <div class="i-gap"><b>GAP vs n8proof</b><br/>Developer-focused, not client-facing.</div>
+      </div>
+      <div class="intel-card reveal">
+        <div class="i-head"><h4>OpsVeritas</h4><div class="threat med"></div></div>
+        <p>Paid n8n monitor & alerting.</p>
+        <div class="i-gap"><b>GAP vs n8proof</b><br/>Focus on ops, missing client trust reports.</div>
+      </div>
+      <div class="intel-card reveal">
+        <div class="i-head"><h4>flowatch.xyz</h4><div class="threat med"></div></div>
+        <p>n8n+Make email/Telegram alerts.</p>
+        <div class="i-gap"><b>GAP vs n8proof</b><br/>Basic alerts, no silent-failure detection.</div>
+      </div>
+      <div class="intel-card reveal">
+        <div class="i-head"><h4>NoCrash</h4><div class="threat med"></div></div>
+        <p>Catches green runs that did nothing.</p>
+        <div class="i-gap"><b>GAP vs n8proof</b><br/>Feature, not a full platform.</div>
+      </div>
+      <div class="intel-card reveal">
+        <div class="i-head"><h4>AgeniusDesk</h4><div class="threat med"></div></div>
+        <p>Open-source self-hosted observability.</p>
+        <div class="i-gap"><b>GAP vs n8proof</b><br/>Self-hosted friction, lacks agency portal.</div>
+      </div>
+      <div class="intel-card reveal">
+        <div class="i-head"><h4>n8n Reliability Kit</h4><div class="threat low"></div></div>
+        <p>$25 Gumroad DIY kit.</p>
+        <div class="i-gap"><b>GAP vs n8proof</b><br/>Template, not a live service.</div>
+      </div>
+    </div>
+    <div class="moat-bar reveal">
+      YOUR MOAT: <b>White-label agency client health reports.</b> None of the 8 own this.
+    </div>
+  </div>
+</section>
+
+<!-- ============ LOG ============ -->
+<section id="log">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="mono">Decisions Made</span>
+      <h2>The Record</h2>
+    </div>
+    <div class="log-list">
+      <div class="log-item reveal"><div class="log-date">Jul 20</div><div class="log-text">Niche locked: SilentGuard (now n8proof). Pivot chain committed.</div></div>
+      <div class="log-item reveal"><div class="log-date">Jul 20</div><div class="log-text">Demand VERIFIED firsthand (12+ community threads, 2022→2026).</div></div>
+      <div class="log-item reveal"><div class="log-date">Jul 20</div><div class="log-text">Agency angle decided: "your client shouldn't find out before you".</div></div>
+      <div class="log-item reveal"><div class="log-date">Jul 20</div><div class="log-text">Landing page + grader built and verified (25/100 flawed, 100/100 hardened).</div></div>
+      <div class="log-item reveal"><div class="log-date">Jul 20</div><div class="log-text">Red-teamed research: killed fabricated claims, debunked "Administrate".</div></div>
+      <div class="log-item reveal"><div class="log-date">Jul 22</div><div class="log-text">Product renamed from SilentGuard to n8proof (domain conflict).</div></div>
+      <div class="log-item reveal"><div class="log-date">Jul 22</div><div class="log-text">n8proof.com domain purchased.</div></div>
+      <div class="log-item reveal"><div class="log-date">Jul 22</div><div class="log-text">Rebuilt landing page at SOVEREIGN quality level.</div></div>
+      <div class="log-item reveal"><div class="log-date">Jul 22</div><div class="log-text">FlowLint discovered as competitor #8.</div></div>
+      <div class="log-item reveal"><div class="log-date">Jul 23</div><div class="log-text">Mission Control dashboard built.</div></div>
+      <div class="log-item reveal"><div class="log-date">Jul 23</div><div class="log-text">Deployment decided: Cloudflare Pages (free, fastest CDN, $0 hosting).</div></div>
+      <div class="log-item reveal"><div class="log-date">Jul 23</div><div class="log-text">CompileFuture micro-tool strategy analyzed — stole 3 tactics: Cloudflare stack, programmatic SEO pages, _headers fix.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ QUESTIONS & RULES ============ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="mono">Unresolved</span>
+      <h2>Open Questions</h2>
+    </div>
+    <div class="q-grid" style="margin-bottom:80px;">
+      <div class="q-card reveal"><span class="tag open">OPEN</span><p>Founding deposit price: $49 or $99/mo?</p></div>
+      <div class="q-card reveal"><span class="tag" style="background:var(--green);color:#0a0a0f">RESOLVED</span><p>Deploy to Cloudflare Pages (free, fastest CDN, Astro-native).</p></div>
+      <div class="q-card reveal"><span class="tag unverified">UNVERIFIED</span><p>Real exit comps for $10k TrustMRR exit</p></div>
+      <div class="q-card reveal"><span class="tag open">NEEDS TESTING</span><p>Dodo Payments fee verification</p></div>
+      <div class="q-card reveal"><span class="tag open">OPEN</span><p>Build-in-public platform: Reddit vs X vs both?</p></div>
+      <div class="q-card reveal"><span class="tag open">OPEN</span><p>Demo recording tool: Loom vs OBS vs Screen Studio?</p></div>
+    </div>
+
+    <div class="sec-head reveal">
+      <span class="mono">The Non-Negotiables</span>
+      <h2>Rules of Engagement</h2>
+    </div>
+    <div class="rules-grid">
+      <div class="rule-card reveal"><div class="dot r"></div><div><h4>TRACKER.md is God</h4><p>Wins over everything.</p></div></div>
+      <div class="rule-card reveal"><div class="dot r"></div><div><h4>Claim-Clean Rule</h4><p>Real numbers only, [N] placeholders until measured.</p></div></div>
+      <div class="rule-card reveal"><div class="dot r"></div><div><h4>7-Day Gate</h4><p>No exceptions, no extensions, no "one more week".</p></div></div>
+      <div class="rule-card reveal"><div class="dot r"></div><div><h4>One Niche, Total Focus</h4><p>n8proof agency angle only.</p></div></div>
+      <div class="rule-card reveal"><div class="dot y"></div><div><h4>Charge Immediately</h4><p>Deposits = validation signal.</p></div></div>
+      <div class="rule-card reveal"><div class="dot y"></div><div><h4>Distribution > Features</h4><p>The grader IS the marketing.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="wrap">
+    <div class="big reveal">n8proof <span class="accent-v">·</span> Mission Control</div>
+    <div class="mono reveal">TRACKER.md is the source of truth. This dashboard syncs with it.</div>
+    <div class="small">Last synced: <span id="syncTime">Never</span> <br/>© 2026</div>
+  </div>
+</footer>
+
+<!-- FAB -->
+<div class="fab-container">
+  <button class="fab primary interactive" onclick="exportTracker()">⭳ Export TRACKER.md</button>
+  <label class="fab interactive">
+    ⭱ Import
+    <input type="file" id="importFile" accept=".md" style="display:none" onchange="importTracker(event)" />
+  </label>
+</div>
+
+<div class="toast" id="toast">✓ TRACKER.md exported</div>
+
+<script>
+  /* ====== INIT ====== */
+  document.getElementById('syncTime').textContent = new Date().toLocaleString();
+
+  /* ====== LOADER ====== */
+  const fill = document.getElementById('loadFill');
+  let p = 0;
+  const li = setInterval(()=>{ p += Math.random()*16; if(p>=100){ p=100; clearInterval(li); setTimeout(()=>document.getElementById('loader').classList.add('done'), 350); } fill.style.width = p+'%'; }, 130);
+
+  /* ====== CURSOR ====== */
+  const dot = document.getElementById('curDot'), ring = document.getElementById('curRing');
+  let mx=innerWidth/2, my=innerHeight/2, rx=mx, ry=my;
+  addEventListener('mousemove', e=>{ mx=e.clientX; my=e.clientY; dot.style.transform=`translate(${mx}px,${my}px) translate(-50%,-50%)`; });
+  function loop(){ rx+=(mx-rx)*0.18; ry+=(my-ry)*0.18; ring.style.transform=`translate(${rx}px,${ry}px) translate(-50%,-50%)`; requestAnimationFrame(loop); }
+  loop();
+  document.querySelectorAll('a,button,.interactive,.card,.intel-card,.q-card,.rule-card,.task-item,.task-group-title,.log-item,label').forEach(el=>{
+    el.addEventListener('mouseenter',()=>ring.classList.add('hot'));
+    el.addEventListener('mouseleave',()=>ring.classList.remove('hot'));
+  });
+
+  /* ====== NAV scroll ====== */
+  const nav = document.getElementById('nav');
+  addEventListener('scroll',()=>{ nav.classList.toggle('solid', scrollY>40); parallax(); });
+  function parallax(){
+    const y = scrollY;
+    document.getElementById('orbA').style.transform = `translateY(${y*0.15}px)`;
+    document.getElementById('orbB').style.transform = `translateY(${-y*0.12}px)`;
+  }
+
+  /* ====== BURGER ====== */
+  const burger=document.getElementById('burger'), mm=document.getElementById('mobileMenu');
+  burger.addEventListener('click',()=>{ burger.classList.toggle('x'); mm.classList.toggle('open'); });
+  
+  /* ====== REVEAL (staggered) ====== */
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach((e,i)=>{
+      if(e.isIntersecting){
+        const sibs = [...e.target.parentElement.querySelectorAll('.reveal')];
+        const idx = sibs.indexOf(e.target);
+        e.target.style.transitionDelay = (idx*0.07)+'s';
+        e.target.classList.add('in');
+        if(e.target.querySelector('.g-bar i')){
+           setTimeout(()=>{ e.target.querySelector('.g-bar i').style.width = e.target.querySelector('span:nth-child(2)').textContent.includes('40') ? '0%' : '0%'; }, 500);
+        }
+        io.unobserve(e.target);
+      }
+    });
+  },{ threshold:0.12 });
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+  /* ====== COUNT UP ====== */
+  const co = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        const el = e.target, target = +el.dataset.count;
+        let cur = +(el.dataset.cur || 0);
+        if (cur >= target) { el.textContent = target; return; }
+        const step = Math.max(1, target/60);
+        const t = setInterval(()=>{ cur+=step; if(cur>=target){ cur=target; clearInterval(t);} el.textContent = Math.floor(cur).toLocaleString(); el.dataset.cur=cur; }, 18);
+        co.unobserve(el);
+      }
+    });
+  },{ threshold:0.5 });
+  document.querySelectorAll('[data-count]').forEach(el=>co.observe(el));
+
+  /* ====== TASKS ====== */
+  const defaultTasks = {
+    'Pre-Gate (Do NOW)': [
+      { id: 'domain', text: 'Buy n8proof.com domain', status: 'done' },
+      { id: 'deploy', text: 'Deploy n8proof.html to Cloudflare Pages (free, fastest CDN)', status: 'todo' },
+      { id: 'headers', text: 'Add _headers file to block .pages.dev from Google indexing', status: 'todo' },
+      { id: 'email', text: 'Set up hello@n8proof.com (Zoho free)', status: 'todo' },
+      { id: 'dodo', text: 'Create Dodo Payments account + test payout', status: 'todo' },
+      { id: 'deposit_price', text: 'Set founding deposit price ($49 or $99/mo)', status: 'todo' },
+      { id: 'demo_clip', text: 'Record 15-sec demo clip (Load → Grade → F → CTA)', status: 'todo' },
+      { id: 'tos', text: 'Generate ToS + Privacy Policy (Termly/iubenda)', status: 'todo' },
+      { id: 'analytics', text: 'Add Plausible analytics to deployed page', status: 'todo' },
+    ],
+    'Gate Week (Day 1-7)': [
+      { id: 'agency_list', text: 'Build list of 20 n8n agencies to outreach', status: 'todo' },
+      { id: 'outreach_10', text: 'Send first 10 personalized cold DMs', status: 'todo' },
+      { id: 'outreach_20', text: 'Send next 10 personalized cold DMs', status: 'todo' },
+      { id: 'forum_answer', text: 'Answer 3+ error-handling threads on n8n forum (substantively)', status: 'todo' },
+      { id: 'forum_post', text: 'Post grader in Built-with-n8n section', status: 'todo' },
+      { id: 'grade_templates', text: 'Grade N public n8n templates, log aggregate results', status: 'todo' },
+      { id: 'reddit_post', text: 'Post build-in-public on r/n8n', status: 'todo' },
+      { id: 'log_replies', text: 'Log every reply/objection/deposit in TRACKER.md same-day', status: 'todo' },
+    ],
+    'Post-Gate Build (Weeks 1-4)': [
+      { id: 'monitor_mvp', text: 'Build monitor MVP: execution watch + silent-failure detection + alerts', status: 'todo' },
+      { id: 'weekly_report', text: 'Build weekly white-label client report email', status: 'todo' },
+      { id: 'onboard_founding', text: 'Onboard 5 founding agencies hands-on', status: 'todo' },
+      { id: 'social_proof', text: 'Get permission to screenshot real user reactions for landing page', status: 'todo' },
+      { id: 'dpa_lite', text: 'Draft DPA-lite for paid monitor (data processing)', status: 'todo' },
+    ],
+    'Scale to $1k MRR (Weeks 4-8)': [
+      { id: 'seo_pages', text: 'Create competitor/alternative SEO pages (FlowPulse alt, Audit8n vs n8proof)', status: 'todo' },
+      { id: 'template_grades', text: 'Build programmatic /grade/[template] pages for every public n8n template (SEO play)', status: 'todo' },
+      { id: 'show_hn', text: 'Post Show HN with real grader usage data', status: 'todo' },
+      { id: 'product_hunt', text: 'Product Hunt launch', status: 'todo' },
+      { id: 'directories', text: 'Submit to 50+ directories (3-5/day)', status: 'todo' },
+      { id: 'content_engine', text: 'Publish "graded [N] workflows, avg [X]/100" content with real data', status: 'todo' },
+      { id: 'ca_consult', text: 'Consult CA re: GST export rules + LUT', status: 'todo' },
+    ],
+    'Exit Prep (Weeks 9-12)': [
+      { id: 'churn_work', text: 'Exit-interview every churned agency', status: 'todo' },
+      { id: 'buyer_docs', text: 'Complete buyer docs folder (5 documents)', status: 'todo' },
+      { id: 'real_comps', text: 'Pull 3 real closed exit comps from TrustMRR/Acquire', status: 'todo' },
+      { id: 'list_exit', text: 'List on TrustMRR + Acquire.com', status: 'todo' },
+    ],
+    'Research DONE ✓': [
+      { id: 'r_reports', text: 'Analyzed 8 research reports (289 pages, 45+ niches)', status: 'done' },
+      { id: 'r_arena', text: 'Built niche ranking arena (25 contenders scored)', status: 'done' },
+      { id: 'r_demand', text: 'Demand verified firsthand (12+ community threads)', status: 'done' },
+      { id: 'r_competitors', text: 'Competitor field mapped (8 verified entrants)', status: 'done' },
+      { id: 'r_positioning', text: 'Agency angle decided (white-label reports wedge)', status: 'done' },
+      { id: 'r_grader', text: 'Landing page + free grader built and verified', status: 'done' },
+      { id: 'r_redteam', text: 'Red-teamed all research, killed fabricated claims', status: 'done' },
+      { id: 'r_name', text: 'Product name finalized: n8proof', status: 'done' },
+    ]
+  };
+
+  let TASKS = JSON.parse(localStorage.getItem('n8proof_tasks')) || defaultTasks;
+  
+  // Merge in case defaults changed
+  for (let g in defaultTasks) {
+    if (!TASKS[g]) TASKS[g] = defaultTasks[g];
+    else {
+      defaultTasks[g].forEach(dt => {
+        if (!TASKS[g].find(t => t.id === dt.id)) TASKS[g].push(dt);
+      });
+    }
+  }
+
+  function saveTasks() {
+    localStorage.setItem('n8proof_tasks', JSON.stringify(TASKS));
+    updateStats();
+  }
+
+  function cycleTask(group, id) {
+    const task = TASKS[group].find(t => t.id === id);
+    if(task.status === 'todo') task.status = 'inprogress';
+    else if(task.status === 'inprogress') task.status = 'done';
+    else task.status = 'todo';
+    saveTasks();
+    renderTasks();
+  }
+
+  function renderTasks() {
+    const container = document.getElementById('taskBoardContainer');
+    container.innerHTML = '';
+    
+    for (let group in TASKS) {
+      const gDiv = document.createElement('div');
+      gDiv.className = 'task-group reveal';
+      
+      const gTitle = document.createElement('div');
+      gTitle.className = 'task-group-title interactive';
+      gTitle.innerHTML = `<span>${group}</span>`;
+      gTitle.onclick = () => {
+        const list = gDiv.querySelector('.task-list');
+        list.style.maxHeight = list.style.maxHeight === '0px' ? list.scrollHeight + 'px' : '0px';
+      };
+      
+      const tList = document.createElement('div');
+      tList.className = 'task-list';
+      tList.style.maxHeight = '2000px';
+      
+      TASKS[group].forEach(t => {
+        const tItem = document.createElement('div');
+        tItem.className = 'task-item interactive';
+        tItem.dataset.status = t.status;
+        tItem.onclick = () => cycleTask(group, t.id);
+        
+        tItem.innerHTML = `
+          <div class="t-icon"></div>
+          <div class="t-text">${t.text}</div>
+        `;
+        
+        // Re-attach cursor hover
+        tItem.addEventListener('mouseenter',()=>ring.classList.add('hot'));
+        tItem.addEventListener('mouseleave',()=>ring.classList.remove('hot'));
+        
+        tList.appendChild(tItem);
+      });
+      
+      gDiv.appendChild(gTitle);
+      gDiv.appendChild(tList);
+      container.appendChild(gDiv);
+    }
+    
+    // Trigger reveals for newly created elements
+    document.querySelectorAll('#taskBoardContainer .reveal').forEach(el=>io.observe(el));
+    updateStats();
+  }
+
+  function updateStats() {
+    let tot = 0, dn = 0, ip = 0, td = 0;
+    for (let g in TASKS) {
+      TASKS[g].forEach(t => {
+        tot++;
+        if(t.status === 'done') dn++;
+        else if(t.status === 'inprogress') ip++;
+        else td++;
+      });
+    }
+    
+    document.getElementById('ts-tot').textContent = tot;
+    document.getElementById('ts-dn').textContent = dn;
+    document.getElementById('ts-ip').textContent = ip;
+    document.getElementById('ts-td').textContent = td;
+    
+    const pctDn = tot === 0 ? 0 : Math.round((dn / tot) * 100);
+    const pctIp = tot === 0 ? 0 : Math.round((ip / tot) * 100);
+    
+    document.getElementById('ts-pct').textContent = pctDn + '%';
+    document.getElementById('tp-dn').style.width = pctDn + '%';
+    document.getElementById('tp-ip').style.width = pctIp + '%';
+    
+    // Donut chart logic
+    const circ = 2 * Math.PI * 40; // r=40
+    const dDone = document.getElementById('donutDone');
+    const dIn = document.getElementById('donutIn');
+    
+    dDone.style.strokeDasharray = circ;
+    dDone.style.strokeDashoffset = circ - (circ * pctDn / 100);
+    
+    dIn.style.strokeDasharray = circ;
+    // In progress starts where done ends
+    dIn.style.strokeDashoffset = circ - (circ * (pctDn + pctIp) / 100);
+    
+    document.getElementById('donutPct').textContent = pctDn + '%';
+  }
+
+  renderTasks();
+
+  /* ====== EXPORT / IMPORT ====== */
+  function exportTracker() {
+    let md = `# n8proof - Execution Tracker\n\n`;
+    
+    for (let g in TASKS) {
+      md += `## ${g}\n`;
+      TASKS[g].forEach(t => {
+        let box = '[ ]';
+        if (t.status === 'done') box = '[x]';
+        else if (t.status === 'inprogress') box = '[/]';
+        md += `- ${box} ${t.text}\n`;
+      });
+      md += `\n`;
+    }
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(md).then(() => {
+      // Toast
+      const t = document.getElementById('toast');
+      t.classList.add('show');
+      setTimeout(()=>t.classList.remove('show'), 3000);
+    });
+    
+    // Download file
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'TRACKER.md';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importTracker(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+      const content = evt.target.result;
+      const lines = content.split('\\n');
+      
+      let curGroup = null;
+      let newTasks = {};
+      
+      lines.forEach(line => {
+        if (line.startsWith('## ')) {
+          curGroup = line.substring(3).trim();
+          newTasks[curGroup] = [];
+        } else if (line.startsWith('- [') && curGroup) {
+          const match = line.match(/^- \\[(.)\\] (.*)/);
+          if (match) {
+            const mark = match[1];
+            const text = match[2].trim();
+            let status = 'todo';
+            if (mark === 'x' || mark === 'X') status = 'done';
+            else if (mark === '/') status = 'inprogress';
+            
+            // Generate simple id
+            const id = text.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 15);
+            newTasks[curGroup].push({ id, text, status });
+          }
+        }
+      });
+      
+      if (Object.keys(newTasks).length > 0) {
+        TASKS = newTasks;
+        saveTasks();
+        renderTasks();
+        alert('Tracker imported successfully.');
+      } else {
+        alert('Could not parse TRACKER.md. Make sure format is correct.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = ''; // Reset input
+  }
+</script>
+</body>
+</html>
